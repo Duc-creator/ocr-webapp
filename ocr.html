@@ -183,7 +183,7 @@
         tessedit_pageseg_mode: 7
       });
 
-      const cleaned = text.trim().replace(/\s+/g, '');
+      const cleaned = text.trim();
       ocrTextDiv.innerText = cleaned;
 
       const targetLines = targetTextArea.value.split('\n').map(l => l.trim()).filter(l => l !== '');
