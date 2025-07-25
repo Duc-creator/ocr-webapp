@@ -83,9 +83,8 @@
   <div id="result"></div>
   <div id="ocrText"></div>
 
-  <!-- Âm thanh -->
+  <!-- Âm thanh chỉ cho kết quả đúng -->
   <audio id="sound-correct" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
-  <audio id="sound-wrong" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
@@ -97,10 +96,9 @@
     const startBtn = document.getElementById('startBtn');
     const targetTextArea = document.getElementById('targetText');
     const soundCorrect = document.getElementById('sound-correct');
-    const soundWrong = document.getElementById('sound-wrong');
     let scanning = false;
     let intervalId = null;
-    let lastStatus = null; // Lưu trạng thái lần trước (đúng/sai)
+    let lastStatus = null; // Lưu trạng thái lần trước
 
     // Mở camera
     async function openCamera() {
@@ -113,7 +111,7 @@
     }
     openCamera();
 
-    // Hàm OCR với vùng crop
+    // OCR với vùng crop
     async function scanFrame() {
       if (!scanning) return;
 
@@ -140,21 +138,26 @@
       const targetLines = targetTextArea.value.split('\n').map(l => l.trim()).filter(l => l !== '');
       const isMatch = targetLines.length > 0 && targetLines.every(line => cleaned.includes(line));
 
-      // Hiển thị kết quả
       resultDiv.innerHTML = isMatch ? '✅ ĐÚNG' : '❌ SAI';
       resultDiv.className = isMatch ? 'ok' : 'fail';
 
-      // Phát âm thanh khi trạng thái thay đổi
+      // Phát tiếng tinh tinh chỉ khi ĐÚNG và trạng thái thay đổi
       if (isMatch && lastStatus !== 'correct') {
+        soundCorrect.currentTime = 0;
         soundCorrect.play();
         lastStatus = 'correct';
-      } else if (!isMatch && lastStatus !== 'wrong') {
-        soundWrong.play();
+      } else if (!isMatch) {
         lastStatus = 'wrong';
       }
     }
 
     startBtn.addEventListener('click', () => {
+      if (!scanning) {
+        // Kích hoạt quyền phát âm thanh
+        soundCorrect.play().catch(() => {});
+        soundCorrect.pause();
+      }
+
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
