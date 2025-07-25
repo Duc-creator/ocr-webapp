@@ -41,12 +41,6 @@
       max-width: 400px; 
       margin: auto; 
     }
-    #snapshot {
-      margin-top: 10px;
-      max-width: 240px;
-      border: 2px solid #333;
-      display: none;
-    }
 
     .camera-wrapper {
       position: relative;
@@ -75,9 +69,10 @@
 </head>
 <body>
   <h1>OCR Date Checker</h1>
-  <p>Nhập mã cần kiểm tra:</p>
-  <input id="targetText" placeholder="VD: 180126082J10" />
+  <p>Nhập mã hoặc nhiều dòng để so sánh:</p>
+  <textarea id="targetText" rows="3" placeholder="VD:\n260126\n270126\n280126"></textarea>
   <button id="startBtn">Start Scan</button>
+  <button id="testBeepBtn" style="background:green;">Test Beep</button>
   
   <div class="camera-wrapper">
     <video id="video" autoplay playsinline></video>
@@ -87,7 +82,6 @@
   
   <div id="result"></div>
   <div id="ocrText"></div>
-  <img id="snapshot" alt="Snapshot khi đúng" />
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
@@ -97,10 +91,34 @@
     const resultDiv = document.getElementById('result');
     const ocrTextDiv = document.getElementById('ocrText');
     const startBtn = document.getElementById('startBtn');
-    const targetInput = document.getElementById('targetText');
-    const snapshotImg = document.getElementById('snapshot');
+    const testBeepBtn = document.getElementById('testBeepBtn');
+    const targetTextArea = document.getElementById('targetText');
     let scanning = false;
     let intervalId = null;
+    let lastStatus = null;
+
+    // Web AudioContext
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playBeep() {
+      if (!audioCtx) return;
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); // Tần số 1000Hz
+      gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime); // Tăng âm lượng
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      setTimeout(() => {
+        oscillator.stop();
+      }, 200);
+    }
 
     // Mở camera
     async function openCamera() {
@@ -113,19 +131,20 @@
     }
     openCamera();
 
-    // Tiền xử lý ảnh
+    // Tiền xử lý ảnh: phóng to, grayscale + threshold
     function preprocessImage(srcCanvas) {
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = srcCanvas.width * 3;  // phóng to ×3
-      tempCanvas.height = srcCanvas.height * 3;
+      tempCanvas.width = srcCanvas.width * 2; // phóng to ×2
+      tempCanvas.height = srcCanvas.height * 2;
       const tempCtx = tempCanvas.getContext('2d');
+
       tempCtx.drawImage(srcCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
 
       const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
       const data = imgData.data;
       for (let i = 0; i < data.length; i += 4) {
         const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const bin = avg > 170 ? 255 : 0;
+        const bin = avg > 150 ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = bin;
       }
       tempCtx.putImageData(imgData, 0, 0);
@@ -149,45 +168,48 @@
       const tempCtx = tempCanvas.getContext('2d');
       tempCtx.putImageData(ctx.getImageData(x, y, cropWidth, cropHeight), 0, 0);
 
+      // Tiền xử lý vùng crop
       const preCanvas = preprocessImage(tempCanvas);
 
+      // OCR với Tesseract
       const { data: { text } } = await Tesseract.recognize(preCanvas, 'eng', {
         tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
         tessedit_pageseg_mode: 7
       });
 
-      const cleaned = text.replace(/\s+/g, '').trim();
+      const cleaned = text.trim();
       ocrTextDiv.innerText = cleaned;
 
-      const targetText = targetInput.value.trim();
-      const isMatch = cleaned === targetText && targetText !== "";
+      const targetLines = targetTextArea.value.split('\n').map(l => l.trim()).filter(l => l !== '');
+      const isMatch = targetLines.length > 0 && targetLines.every(line => cleaned.includes(line));
 
       resultDiv.innerHTML = isMatch ? '✅ ĐÚNG' : '❌ SAI';
-      resultDiv.className = isMatch ? 'ok': 'fail';
+      resultDiv.className = isMatch ? 'ok' : 'fail';
 
-      // Nếu đúng -> chụp snapshot và dừng quét
-      if (isMatch) {
-        snapshotImg.src = canvas.toDataURL('image/png');
-        snapshotImg.style.display = 'block';
-        stopScanning();
+      if (isMatch && lastStatus !== 'correct') {
+        playBeep();
+        lastStatus = 'correct';
+      } else if (!isMatch) {
+        lastStatus = 'wrong';
       }
     }
 
-    function startScanning() {
-      scanning = true;
-      startBtn.innerText = 'Stop Scan';
-      snapshotImg.style.display = 'none';
-      intervalId = setInterval(scanFrame, 2000);
-    }
-
-    function stopScanning() {
-      scanning = false;
-      startBtn.innerText = 'Start Scan';
-      clearInterval(intervalId);
-    }
+    // Bắt sự kiện
+    testBeepBtn.addEventListener('click', () => {
+      initAudio();
+      playBeep();
+    });
 
     startBtn.addEventListener('click', () => {
-      scanning? stopScanning() : startScanning();
+      initAudio();
+      scanning = !scanning;
+      if (scanning) {
+        startBtn.innerText = 'Stop Scan';
+        intervalId = setInterval(scanFrame, 1500);
+      } else {
+        startBtn.innerText = 'Start Scan';
+        clearInterval(intervalId);
+      }
     });
   </script>
 </body>
