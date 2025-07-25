@@ -41,7 +41,13 @@
       max-width: 400px; 
       margin: auto; 
     }
-
+    #capturedImage {
+      margin-top: 15px;
+      max-width: 240px;
+      border: 2px solid #444;
+      border-radius: 8px;
+      display: none;
+    }
     .camera-wrapper {
       position: relative;
       display: inline-block;
@@ -82,6 +88,7 @@
   
   <div id="result"></div>
   <div id="ocrText"></div>
+  <img id="capturedImage" alt="Ảnh chụp">
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
@@ -93,6 +100,7 @@
     const startBtn = document.getElementById('startBtn');
     const testBeepBtn = document.getElementById('testBeepBtn');
     const targetTextArea = document.getElementById('targetText');
+    const capturedImage = document.getElementById('capturedImage');
     let scanning = false;
     let intervalId = null;
     let lastStatus = null;
@@ -129,29 +137,31 @@
     }
     openCamera();
 
-    // Tiền xử lý ảnh để tăng độ nhạy OCR
+    // Tiền xử lý ảnh
     function preprocessImage(srcCanvas) {
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = srcCanvas.width * 3; // phóng to ×3
+      tempCanvas.width = srcCanvas.width * 3;
       tempCanvas.height = srcCanvas.height * 3;
       const tempCtx = tempCanvas.getContext('2d');
-
-      // Vẽ phóng to
       tempCtx.drawImage(srcCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
-
-      // Chuyển grayscale + threshold + tăng độ tương phản
       const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
       const data = imgData.data;
       for (let i = 0; i < data.length; i += 4) {
         const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const contrast = avg > 140 ? 255 : 0; // ngưỡng 140
+        const contrast = avg > 140 ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = contrast;
       }
       tempCtx.putImageData(imgData, 0, 0);
       return tempCanvas;
     }
 
-    // OCR với vùng crop là overlay
+    // Hàm chụp ảnh vùng overlay
+    function captureOverlay(cropCanvas) {
+      capturedImage.src = cropCanvas.toDataURL("image/png");
+      capturedImage.style.display = "block";
+    }
+
+    // OCR
     async function scanFrame() {
       if (!scanning) return;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -159,7 +169,6 @@
       const overlay = document.getElementById('overlay');
       const videoRect = video.getBoundingClientRect();
       const overlayRect = overlay.getBoundingClientRect();
-
       const scaleX = canvas.width / videoRect.width;
       const scaleY = canvas.height / videoRect.height;
 
@@ -174,10 +183,8 @@
       const tempCtx = tempCanvas.getContext('2d');
       tempCtx.putImageData(ctx.getImageData(cropX, cropY, cropWidth, cropHeight), 0, 0);
 
-      // Tiền xử lý
       const preCanvas = preprocessImage(tempCanvas);
 
-      // OCR
       const { data: { text } } = await Tesseract.recognize(preCanvas, 'eng', {
         tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
         tessedit_pageseg_mode: 7
@@ -194,6 +201,10 @@
 
       if (isMatch && lastStatus !== 'correct') {
         playBeep();
+        captureOverlay(tempCanvas);  // Chụp ảnh vùng overlay
+        scanning = false;            // Dừng quét
+        clearInterval(intervalId);
+        startBtn.innerText = 'Start Scan';
         lastStatus = 'correct';
       } else if (!isMatch) {
         lastStatus = 'wrong';
@@ -209,9 +220,10 @@
     startBtn.addEventListener('click', () => {
       initAudio();
       scanning = !scanning;
+      capturedImage.style.display = "none"; // Ẩn ảnh cũ khi bắt đầu quét
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
-        intervalId = setInterval(scanFrame, 1200); // tăng tốc độ quét (1.2s)
+        intervalId = setInterval(scanFrame, 1200);
       } else {
         startBtn.innerText = 'Start Scan';
         clearInterval(intervalId);
