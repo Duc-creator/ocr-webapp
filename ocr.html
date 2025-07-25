@@ -110,8 +110,8 @@
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); // Tần số 1000Hz
+      gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime); // Tăng âm lượng
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       oscillator.start();
@@ -131,6 +131,26 @@
     }
     openCamera();
 
+    // Tiền xử lý ảnh: phóng to, grayscale + threshold
+    function preprocessImage(srcCanvas) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = srcCanvas.width * 2; // phóng to ×2
+      tempCanvas.height = srcCanvas.height * 2;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      tempCtx.drawImage(srcCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+      const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        const bin = avg > 150 ? 255 : 0;
+        data[i] = data[i + 1] = data[i + 2] = bin;
+      }
+      tempCtx.putImageData(imgData, 0, 0);
+      return tempCanvas;
+    }
+
     // OCR
     async function scanFrame() {
       if (!scanning) return;
@@ -148,8 +168,13 @@
       const tempCtx = tempCanvas.getContext('2d');
       tempCtx.putImageData(ctx.getImageData(x, y, cropWidth, cropHeight), 0, 0);
 
-      const { data: { text } } = await Tesseract.recognize(tempCanvas, 'eng', {
-        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+      // Tiền xử lý vùng crop
+      const preCanvas = preprocessImage(tempCanvas);
+
+      // OCR với Tesseract
+      const { data: { text } } = await Tesseract.recognize(preCanvas, 'eng', {
+        tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        tessedit_pageseg_mode: 7
       });
 
       const cleaned = text.trim();
@@ -176,7 +201,7 @@
     });
 
     startBtn.addEventListener('click', () => {
-      initAudio(); // Khởi động audio khi bấm nút Start
+      initAudio();
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
