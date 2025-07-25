@@ -72,7 +72,6 @@
   <p>Nhập mã hoặc nhiều dòng để so sánh:</p>
   <textarea id="targetText" rows="3" placeholder="VD:\n260126\n270126\n280126"></textarea>
   <button id="startBtn">Start Scan</button>
-  <button id="testBeepBtn" style="background:green;">Test Beep</button>
   
   <div class="camera-wrapper">
     <video id="video" autoplay playsinline></video>
@@ -83,6 +82,9 @@
   <div id="result"></div>
   <div id="ocrText"></div>
 
+  <!-- Âm thanh khi đúng -->
+  <audio id="sound-correct" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script>
     const video = document.getElementById('video');
@@ -91,34 +93,11 @@
     const resultDiv = document.getElementById('result');
     const ocrTextDiv = document.getElementById('ocrText');
     const startBtn = document.getElementById('startBtn');
-    const testBeepBtn = document.getElementById('testBeepBtn');
     const targetTextArea = document.getElementById('targetText');
+    const soundCorrect = document.getElementById('sound-correct');
     let scanning = false;
     let intervalId = null;
     let lastStatus = null;
-
-    // Web AudioContext
-    let audioCtx = null;
-    function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-    }
-
-    function playBeep() {
-      if (!audioCtx) return;
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      oscillator.start();
-      setTimeout(() => {
-        oscillator.stop();
-      }, 200);
-    }
 
     // Mở camera
     async function openCamera() {
@@ -131,7 +110,7 @@
     }
     openCamera();
 
-    // OCR
+    // OCR với vùng crop
     async function scanFrame() {
       if (!scanning) return;
 
@@ -161,22 +140,17 @@
       resultDiv.innerHTML = isMatch ? '✅ ĐÚNG' : '❌ SAI';
       resultDiv.className = isMatch ? 'ok' : 'fail';
 
+      // Chỉ phát tiếng khi đúng
       if (isMatch && lastStatus !== 'correct') {
-        playBeep();
+        soundCorrect.currentTime = 0;
+        soundCorrect.play().catch(err => console.log("Không phát được audio:", err));
         lastStatus = 'correct';
       } else if (!isMatch) {
         lastStatus = 'wrong';
       }
     }
 
-    // Bắt sự kiện
-    testBeepBtn.addEventListener('click', () => {
-      initAudio();
-      playBeep();
-    });
-
     startBtn.addEventListener('click', () => {
-      initAudio(); // Khởi động audio khi bấm nút Start
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
