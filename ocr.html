@@ -42,6 +42,7 @@
       margin: auto; 
     }
 
+    /* Camera + Overlay */
     .camera-wrapper {
       position: relative;
       display: inline-block;
@@ -82,7 +83,7 @@
   <div id="result"></div>
   <div id="ocrText"></div>
 
-  <!-- Âm thanh khi đúng -->
+  <!-- Âm thanh chỉ cho kết quả đúng -->
   <audio id="sound-correct" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -97,7 +98,7 @@
     const soundCorrect = document.getElementById('sound-correct');
     let scanning = false;
     let intervalId = null;
-    let lastStatus = null;
+    let lastStatus = null; // Lưu trạng thái lần trước
 
     // Mở camera
     async function openCamera() {
@@ -140,10 +141,10 @@
       resultDiv.innerHTML = isMatch ? '✅ ĐÚNG' : '❌ SAI';
       resultDiv.className = isMatch ? 'ok' : 'fail';
 
-      // Chỉ phát tiếng khi đúng
+      // Phát tiếng tinh tinh chỉ khi ĐÚNG và trạng thái thay đổi
       if (isMatch && lastStatus !== 'correct') {
         soundCorrect.currentTime = 0;
-        soundCorrect.play().catch(err => console.log("Không phát được audio:", err));
+        soundCorrect.play();
         lastStatus = 'correct';
       } else if (!isMatch) {
         lastStatus = 'wrong';
@@ -151,6 +152,12 @@
     }
 
     startBtn.addEventListener('click', () => {
+      if (!scanning) {
+        // Kích hoạt quyền phát âm thanh
+        soundCorrect.play().catch(() => {});
+        soundCorrect.pause();
+      }
+
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
