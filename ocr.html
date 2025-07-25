@@ -72,6 +72,7 @@
   <p>Nhập mã hoặc nhiều dòng để so sánh:</p>
   <textarea id="targetText" rows="3" placeholder="VD:\n260126\n270126\n280126"></textarea>
   <button id="startBtn">Start Scan</button>
+  <button id="testBeepBtn" style="background:green;">Test Beep</button>
   
   <div class="camera-wrapper">
     <video id="video" autoplay playsinline></video>
@@ -90,28 +91,33 @@
     const resultDiv = document.getElementById('result');
     const ocrTextDiv = document.getElementById('ocrText');
     const startBtn = document.getElementById('startBtn');
+    const testBeepBtn = document.getElementById('testBeepBtn');
     const targetTextArea = document.getElementById('targetText');
     let scanning = false;
     let intervalId = null;
     let lastStatus = null;
 
-    // Hàm beep nội bộ
+    // Web AudioContext
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
     function playBeep() {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioCtx) return;
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
-
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-
+      gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       oscillator.start();
       setTimeout(() => {
         oscillator.stop();
-        audioCtx.close();
-      }, 200); 
+      }, 200);
     }
 
     // Mở camera
@@ -125,7 +131,7 @@
     }
     openCamera();
 
-    // OCR với vùng crop
+    // OCR
     async function scanFrame() {
       if (!scanning) return;
 
@@ -163,7 +169,14 @@
       }
     }
 
+    // Bắt sự kiện
+    testBeepBtn.addEventListener('click', () => {
+      initAudio();
+      playBeep();
+    });
+
     startBtn.addEventListener('click', () => {
+      initAudio(); // Khởi động audio khi bấm nút Start
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
