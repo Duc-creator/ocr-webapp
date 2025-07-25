@@ -110,14 +110,12 @@
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); // Tần số 1000Hz
-      gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime); // Tăng âm lượng
+      oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.4, audioCtx.currentTime);
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       oscillator.start();
-      setTimeout(() => {
-        oscillator.stop();
-      }, 200);
+      setTimeout(() => oscillator.stop(), 200);
     }
 
     // Mở camera
@@ -131,53 +129,61 @@
     }
     openCamera();
 
-    // Tiền xử lý ảnh: phóng to, grayscale + threshold
+    // Tiền xử lý ảnh để tăng độ nhạy OCR
     function preprocessImage(srcCanvas) {
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = srcCanvas.width * 2; // phóng to ×2
-      tempCanvas.height = srcCanvas.height * 2;
+      tempCanvas.width = srcCanvas.width * 3; // phóng to ×3
+      tempCanvas.height = srcCanvas.height * 3;
       const tempCtx = tempCanvas.getContext('2d');
 
+      // Vẽ phóng to
       tempCtx.drawImage(srcCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
 
+      // Chuyển grayscale + threshold + tăng độ tương phản
       const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
       const data = imgData.data;
       for (let i = 0; i < data.length; i += 4) {
         const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        const bin = avg > 150 ? 255 : 0;
-        data[i] = data[i + 1] = data[i + 2] = bin;
+        const contrast = avg > 140 ? 255 : 0; // ngưỡng 140
+        data[i] = data[i + 1] = data[i + 2] = contrast;
       }
       tempCtx.putImageData(imgData, 0, 0);
       return tempCanvas;
     }
 
-    // OCR
+    // OCR với vùng crop là overlay
     async function scanFrame() {
       if (!scanning) return;
-
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const cropWidth = 150;
-      const cropHeight = 50;
-      const x = (canvas.width - cropWidth) / 2;
-      const y = (canvas.height - cropHeight) / 2;
+      const overlay = document.getElementById('overlay');
+      const videoRect = video.getBoundingClientRect();
+      const overlayRect = overlay.getBoundingClientRect();
+
+      const scaleX = canvas.width / videoRect.width;
+      const scaleY = canvas.height / videoRect.height;
+
+      const cropX = (overlayRect.left - videoRect.left) * scaleX;
+      const cropY = (overlayRect.top - videoRect.top) * scaleY;
+      const cropWidth = overlayRect.width * scaleX;
+      const cropHeight = overlayRect.height * scaleY;
 
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = cropWidth;
       tempCanvas.height = cropHeight;
       const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.putImageData(ctx.getImageData(x, y, cropWidth, cropHeight), 0, 0);
+      tempCtx.putImageData(ctx.getImageData(cropX, cropY, cropWidth, cropHeight), 0, 0);
 
-      // Tiền xử lý vùng crop
+      // Tiền xử lý
       const preCanvas = preprocessImage(tempCanvas);
 
-      // OCR với Tesseract
+      // OCR
       const { data: { text } } = await Tesseract.recognize(preCanvas, 'eng', {
         tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
         tessedit_pageseg_mode: 7
       });
 
-      const cleaned = text.trim();
+      const cleaned = text.trim().replace(/\s+/g, '');
       ocrTextDiv.innerText = cleaned;
 
       const targetLines = targetTextArea.value.split('\n').map(l => l.trim()).filter(l => l !== '');
@@ -205,7 +211,7 @@
       scanning = !scanning;
       if (scanning) {
         startBtn.innerText = 'Stop Scan';
-        intervalId = setInterval(scanFrame, 1500);
+        intervalId = setInterval(scanFrame, 1200); // tăng tốc độ quét (1.2s)
       } else {
         startBtn.innerText = 'Start Scan';
         clearInterval(intervalId);
